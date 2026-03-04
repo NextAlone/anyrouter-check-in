@@ -344,7 +344,6 @@ async def main():
 	current_balances = {}
 	account_check_in_details = {}  # 存储每个账号的签到详情
 	need_notify = False  # 是否需要发送通知
-	balance_changed = False  # 余额是否有变化
 
 	for i, account in enumerate(accounts):
 		account_key = f'account_{i + 1}'
@@ -409,42 +408,26 @@ async def main():
 					account_result += f'\n{user_info_after.get("error", "Unknown error")}'
 				notification_content.append(account_result)
 
+			if success and account_key in account_check_in_details:
+				detail = account_check_in_details[account_key]
+				if detail.get('check_in_reward', 0) > 0:
+					need_notify = True
+					notification_content.append(format_check_in_notification(detail))
+					print(f'[NOTIFY] {detail["name"]} check-in reward detected, will send notification')
+
 		except Exception as e:
 			account_name = account.get_display_name(i)
 			print(f'[FAILED] {account_name} processing exception: {e}')
 			need_notify = True  # 异常也需要通知
 			notification_content.append(f'[FAIL] {account_name} exception: {str(e)[:50]}...')
 
-	# 检查余额变化
+	# 检查余额变化（仅用于记录）
 	current_balance_hash = generate_balance_hash(current_balances) if current_balances else None
 	if current_balance_hash:
-		if last_balance_hash is None:
-			# 首次运行
-			balance_changed = True
-			need_notify = True
-			print('[NOTIFY] First run detected, will send notification with current balances')
-		elif current_balance_hash != last_balance_hash:
-			# 余额有变化
-			balance_changed = True
-			need_notify = True
-			print('[NOTIFY] Balance changes detected, will send notification')
+		if current_balance_hash != last_balance_hash:
+			print('[INFO] Balance changes detected')
 		else:
 			print('[INFO] No balance changes detected')
-
-	# 为有余额变化的情况添加所有成功账号到通知内容
-	if balance_changed:
-		for i, account in enumerate(accounts):
-			account_key = f'account_{i + 1}'
-			if account_key in account_check_in_details:
-				detail = account_check_in_details[account_key]
-				account_name = detail['name']
-
-				# 使用格式化函数生成通知消息
-				account_result = format_check_in_notification(detail)
-
-				# 检查是否已经在通知内容中（避免重复）
-				if not any(account_name in item for item in notification_content):
-					notification_content.append(account_result)
 
 	# 保存当前余额hash
 	if current_balance_hash:
@@ -471,9 +454,9 @@ async def main():
 
 		print(notify_content)
 		notify.push_message('AnyRouter Check-in Alert', notify_content, msg_type='text')
-		print('[NOTIFY] Notification sent due to failures or balance changes')
+		print('[NOTIFY] Notification sent due to new check-in rewards or failures')
 	else:
-		print('[INFO] All accounts successful and no balance changes detected, notification skipped')
+		print('[INFO] No new check-in rewards and no failures, notification skipped')
 
 	# 设置退出码
 	sys.exit(0 if success_count > 0 else 1)
