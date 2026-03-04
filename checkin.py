@@ -424,7 +424,10 @@ async def main():
 	# 检查余额变化（仅用于记录）
 	current_balance_hash = generate_balance_hash(current_balances) if current_balances else None
 	if current_balance_hash:
-		if current_balance_hash != last_balance_hash:
+		# 首次运行时 last_balance_hash 为 None，此时应视为建立基线而不是“检测到变化”
+		if last_balance_hash is None:
+			print('[INFO] First run detected, balance baseline saved')
+		elif current_balance_hash != last_balance_hash:
 			print('[INFO] Balance changes detected')
 		else:
 			print('[INFO] No balance changes detected')
